@@ -47,7 +47,7 @@ class KITTI360(Dataset):
                 pose[3, 3] = 1.0
                 pose = pose @ cam0_to_velo.inverse()
                 poses2.append(pose.float().numpy())
-        self.frames_with_gt = np.array(self.frames_with_gt, dtype=np.int16)
+        self.frames_with_gt = np.array(self.frames_with_gt, dtype=int)
         poses2 = np.stack(poses2)
         self.poses = poses2
         self.kdtree = KDTree(self.poses[:, :3, 3])
@@ -64,16 +64,18 @@ class KITTI360(Dataset):
         anchor_pose = torch.tensor([x, y, z])
 
         indices = self.kdtree.query_radius(anchor_pose.unsqueeze(0).numpy(), self.positive_range)
+        indices = [int(indx) for indx in indices[0]]
         min_range = max(0, idx-50)
         max_range = min(idx+50, self.poses.shape[0])
-        positive_idxs = list(set(indices[0]) - set(range(min_range, max_range)))
+        positive_idxs = list(set(indices) - set(range(min_range, max_range)))
         positive_idxs.sort()
         num_loop = len(positive_idxs)
         if num_loop > 0:
             positive_idxs = list(self.frames_with_gt[np.array(positive_idxs)])
 
         indices = self.kdtree.query_radius(anchor_pose.unsqueeze(0).numpy(), self.negative_range)
-        indices = set(indices[0])
+        indices = [int(indx) for indx in indices[0]]
+        indices = set(indices)
         negative_idxs = set(range(self.poses.shape[0])) - indices
         negative_idxs = list(negative_idxs)
         negative_idxs.sort()
@@ -92,27 +94,33 @@ class KITTI360(Dataset):
 
 
 if __name__ == '__main__':
+    from tqdm import tqdm
+    import json
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--root_folder', default='./KITTI-360', help='dataset directory')
     args = parser.parse_args()
 
+    sequences = ["2013_05_28_drive_0000_sync", "2013_05_28_drive_0002_sync", "2013_05_28_drive_0003_sync",
+                 "2013_05_28_drive_0004_sync", "2013_05_28_drive_0005_sync", "2013_05_28_drive_0006_sync",
+                 "2013_05_28_drive_0007_sync", "2013_05_28_drive_0009_sync",  "2013_05_28_drive_0010_sync"]
+
     base_dir = args.root_folder
-    for sequence in ["2013_05_28_drive_0000_sync", "2013_05_28_drive_0002_sync", "2013_05_28_drive_0003_sync",
-                     "2013_05_28_drive_0004_sync", "2013_05_28_drive_0005_sync", "2013_05_28_drive_0006_sync",
-                     "2013_05_28_drive_0007_sync", "2013_05_28_drive_0009_sync", "2013_05_28_drive_0010_sync"]:
+    for seq_index, sequence in enumerate(sequences):
         dataset = KITTI360(base_dir, sequence, 4, 10, [6, 10])
         lc_gt = []
         lc_gt_file = os.path.join(base_dir, 'data_poses', sequence, 'loop_GT_4m.pickle')
 
-        for i in range(len(dataset)):
+        progress_bar = tqdm(range(len(dataset)), desc=f'{seq_index+1}/{len(sequences)}')
+        for i in progress_bar:
             sample, pos, neg, hard = dataset[i]
             if sample > 0.:
                 idx = dataset.frames_with_gt[i]
                 sample_dict = {}
-                sample_dict['idx'] = idx
-                sample_dict['positive_idxs'] = pos
-                sample_dict['negative_idxs'] = neg
-                sample_dict['hard_idxs'] = hard
+                sample_dict['idx'] = int(idx)
+                sample_dict['positive_idxs'] = [int(v) for v in pos]
+                sample_dict['negative_idxs'] = [int(v) for v in neg]
+                sample_dict['hard_idxs'] = [int(v) for v in hard]
                 lc_gt.append(sample_dict)
         with open(lc_gt_file, 'wb') as f:
             pickle.dump(lc_gt, f)

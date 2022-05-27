@@ -124,7 +124,7 @@ def main_process(gpu, weights_path, args):
                                                 without_ground=args.without_ground)
     elif args.dataset == 'kitti360':
         validation_dataset = KITTI3603DPoses(args.root_folder, validation_sequences[0],
-                                             train=False, loop_file='loop_GT_4m_noneg',
+                                             train=False, loop_file='loop_GT_4m',
                                              remove_random_angle=args.remove_random_angle,
                                              without_ground=args.without_ground)
     else:
@@ -227,11 +227,12 @@ def main_process(gpu, weights_path, args):
     plt.show()
     # fig.savefig(f'./precision_recall_curve.pdf', bbox_inches='tight', pad_inches=0)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--root_folder', default='./KITTI',
                         help='dataset directory')
-    parser.add_argument('--weights_path', default='./checkpoints')
+    parser.add_argument('--weights_path', default='./checkpoints/LCDNet-kitti360.tar')
     parser.add_argument('--num_iters', type=int, default=1)
     parser.add_argument('--dataset', type=str, default='kitti')
     parser.add_argument('--remove_random_angle', type=int, default=-1)
