@@ -92,6 +92,12 @@ class KITTI3603DPoses(Dataset):
         with open(gt_file, 'rb') as f:
             temp = pickle.load(f)
             for elem in temp:
+                # if without_ground:
+                #     velo_path = os.path.join(dir, 'sequences', f'{int(sequence):02d}',
+                #                              'velodyne_no_ground', f'{idx:06d}.h5')
+                # else:
+                #     velo_path = os.path.join(dir, 'sequences', f'{int(sequence):02d}', 'velodyne', f'{idx:06d}.bin')
+
                 temp_dict = {'idx': elem['idx'], 'positive_idxs': elem['positive_idxs']}
                 self.loop_gt.append(temp_dict)
             del temp

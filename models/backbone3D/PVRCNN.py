@@ -45,7 +45,7 @@ class PVRCNN(nn.Module):
     def __init__(self, model_cfg, training=True, norm=None, shared_embeddings=False):
         super(PVRCNN, self).__init__()
         point_cloud_range = np.array(model_cfg.DATA_CONFIG.POINT_CLOUD_RANGE)
-        voxel_size = model_cfg.DATA_CONFIG.DATA_PROCESSOR[2]['VOXEL_SIZE']
+        voxel_size = model_cfg.DATA_CONFIG['DATA_PROCESSOR'][2]['VOXEL_SIZE']
         grid_size = (point_cloud_range[3:6] - point_cloud_range[0:3]) / np.array(voxel_size)
 
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
@@ -54,11 +54,11 @@ class PVRCNN(nn.Module):
         if norm == 'group':
             norm_fn = partial(nn.GroupNorm, 8)
 
-        raw_in_channel = len(model_cfg.DATA_CONFIG.POINT_FEATURE_ENCODING.src_feature_list)
+        raw_in_channel = len(model_cfg.DATA_CONFIG['POINT_FEATURE_ENCODING'].src_feature_list)
         in_channel = raw_in_channel
         self.point_feature_size = model_cfg.MODEL.PFE.NUM_OUTPUT_FEATURES
 
-        self.data_processor = DataProcessor(model_cfg.DATA_CONFIG.DATA_PROCESSOR, point_cloud_range, training, 4)
+        self.data_processor = DataProcessor(model_cfg.DATA_CONFIG['DATA_PROCESSOR'], point_cloud_range, training, 4)
         self.vfe = MeanVFE(model_cfg, in_channel)
 
         self.reduce_input_dimensionality = False

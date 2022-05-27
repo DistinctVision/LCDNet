@@ -35,11 +35,21 @@ class KITTI360(Dataset):
         self.frames_with_gt = []
         poses2 = []
         poses = os.path.join(dir, 'data_poses', sequence, 'cam0_to_world.txt')
+        scan_dir = os.path.join(dir, 'data_3d_raw', sequence)
+        without_ground = True
         with open(poses, 'r') as f:
             for x in f:
                 x = x.strip().split()
                 x = [float(v) for v in x]
-                self.frames_with_gt.append(int(x[0]))
+                idx = int(x[0])
+                # if without_ground:
+                #     velo_path = os.path.join(scan_dir, 'sequences', f'{sequence}', 'velodyne_no_ground', f'{idx:06d}.h5')
+                # else:
+                #     velo_path = os.path.join(scan_dir, 'sequences', f'{sequence}', 'velodyne', f'{idx:06d}.bin')
+                # if not os.path.exists(velo_path):
+                #     continue
+
+                self.frames_with_gt.append(idx)
                 pose = torch.zeros((4, 4), dtype=torch.float64)
                 pose[0, 0:4] = torch.tensor(x[1:5])
                 pose[1, 0:4] = torch.tensor(x[5:9])
@@ -104,6 +114,7 @@ if __name__ == '__main__':
     sequences = ["2013_05_28_drive_0000_sync", "2013_05_28_drive_0002_sync", "2013_05_28_drive_0003_sync",
                  "2013_05_28_drive_0004_sync", "2013_05_28_drive_0005_sync", "2013_05_28_drive_0006_sync",
                  "2013_05_28_drive_0007_sync", "2013_05_28_drive_0009_sync",  "2013_05_28_drive_0010_sync"]
+    sequences = ["2013_05_28_drive_0008_sync"]
 
     base_dir = args.root_folder
     for seq_index, sequence in enumerate(sequences):

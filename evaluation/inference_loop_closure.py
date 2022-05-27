@@ -113,6 +113,7 @@ def main_process(gpu, weights_path, args):
     exp_cfg['batch_size'] = 6
     exp_cfg['loop_file'] = 'loop_GT_4m'
     exp_cfg['head'] = 'UOTHead'
+    exp_cfg['PC_RANGE'] = [-70.4, -70.4, -1, 70.4, 70.4, 3]
 
     validation_sequences = [args.validation_sequence]
     if args.dataset == 'kitti':

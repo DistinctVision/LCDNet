@@ -12,9 +12,7 @@ args = parser.parse_args()
 base_dir = args.root_folder
 out_dir = 'velodyne_no_ground'
 
-for sequence in ["2013_05_28_drive_0000_sync", "2013_05_28_drive_0002_sync",
-                 "2013_05_28_drive_0004_sync", "2013_05_28_drive_0005_sync",
-                 "2013_05_28_drive_0006_sync"]:
+for sequence in ["2013_05_28_drive_0008_sync"]:
     if not os.path.exists(os.path.join(base_dir, 'data_3d_raw', sequence, out_dir)):
         os.mkdir(os.path.join(base_dir, 'data_3d_raw', sequence, out_dir))
     f = open(f"./failed_frames_{sequence}.txt", "w")
@@ -22,6 +20,8 @@ for sequence in ["2013_05_28_drive_0000_sync", "2013_05_28_drive_0002_sync",
     file_list = os.listdir(os.path.join(base_dir, 'data_3d_raw', sequence, 'velodyne_points', 'data'))
     for idx in tqdm(range(len(file_list))):
         velo_path = os.path.join(base_dir, 'data_3d_raw', sequence, 'velodyne_points', 'data', f'{idx:010d}.bin')
+        if not os.path.exists(velo_path):
+            continue
         save_file = os.path.join(base_dir, 'data_3d_raw', sequence, out_dir, f'{idx:010d}.npy')
         if os.path.exists(save_file):
             continue
