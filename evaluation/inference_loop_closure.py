@@ -102,6 +102,9 @@ class BatchSamplePairs(BatchSampler):
 
 
 def main_process(gpu, weights_path, args):
+# with ground - Average Precision 0.9228574918418695
+# without ground - Average Precision 0.9321457734169697
+
     global EPOCH
 
     torch.cuda.set_device(gpu)
@@ -225,6 +228,7 @@ def main_process(gpu, weights_path, args):
     plt.ylabel("Precision [%]")
     plt.xticks([0, 0.2, 0.4, 0.6, 0.8, 1.0], ["0", "20", "40", "60", "80", "100"])
     plt.yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0], ["0", "20", "40", "60", "80", "100"])
+    plt.savefig('out.png')
     plt.show()
     # fig.savefig(f'./precision_recall_curve.pdf', bbox_inches='tight', pad_inches=0)
 

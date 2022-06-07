@@ -1,10 +1,12 @@
 import argparse
+import enum
 import torch
 from torch.utils.data import Dataset
 import os
 from sklearn.neighbors import KDTree
 import pickle
 import numpy as np
+from tqdm import tqdm
 
 
 class KITTI360(Dataset):
@@ -113,8 +115,7 @@ if __name__ == '__main__':
 
     sequences = ["2013_05_28_drive_0000_sync", "2013_05_28_drive_0002_sync", "2013_05_28_drive_0003_sync",
                  "2013_05_28_drive_0004_sync", "2013_05_28_drive_0005_sync", "2013_05_28_drive_0006_sync",
-                 "2013_05_28_drive_0007_sync", "2013_05_28_drive_0009_sync",  "2013_05_28_drive_0010_sync"]
-    sequences = ["2013_05_28_drive_0008_sync"]
+                 "2013_05_28_drive_0007_sync", "2013_05_28_drive_0009_sync", "2013_05_28_drive_0010_sync"]
 
     base_dir = args.root_folder
     for seq_index, sequence in enumerate(sequences):

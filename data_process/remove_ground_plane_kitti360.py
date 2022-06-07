@@ -1,10 +1,12 @@
 import argparse
 import h5py
-import open3d as o3d
 import os
+# os.environ["NUMEXPR_MAX_THREADS"] = 15
+import open3d as o3d
 import torch
 from tqdm import tqdm
 import numpy as np
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_folder', default='./KITTI', help='dataset directory')
@@ -35,7 +37,7 @@ for sequence in ["2013_05_28_drive_0008_sync"]:
         i = 0
         while np.argmax(plane_model[:-1]) != 2:
             i += 1
-            pcd = pcd.select_down_sample(inliers, invert=True)
+            pcd = pcd.select_by_index(inliers, invert=True)
             plane_model, inliers = pcd.segment_plane(distance_threshold=0.2,
                                                      ransac_n=3,
                                                      num_iterations=10000)
