@@ -102,8 +102,8 @@ class BatchSamplePairs(BatchSampler):
 
 
 def main_process(gpu, weights_path, args):
-# with ground - Average Precision 0.9228574918418695
-# without ground - Average Precision 0.9321457734169697
+# KITTI360 with ground - Average Precision 0.9228574918418695
+# KITTI360 without ground - Average Precision 0.9321457734169697
 
     global EPOCH
 
