@@ -20,6 +20,7 @@ from tqdm import tqdm
 
 from datasets.KITTI360Dataset import KITTI3603DPoses
 from datasets.KITTIDataset import KITTILoader3DPoses
+from datasets.astral_datasets import AstralPoses
 from evaluation.plot_PR_curve import compute_PR, compute_AP, compute_PR_pairs
 from models.get_models import get_model
 from utils.data import merge_inputs
@@ -121,7 +122,8 @@ def main_process(gpu, weights_path, args):
     validation_sequences = [args.validation_sequence]
     if args.dataset == 'kitti':
         validation_dataset = KITTILoader3DPoses(args.root_folder, validation_sequences[0],
-                                                os.path.join(args.root_folder, 'sequences', validation_sequences[0],'poses.txt'),
+                                                os.path.join(args.root_folder, 'sequences',
+                                                             validation_sequences[0], 'poses.txt'),
                                                 train=False,
                                                 loop_file=exp_cfg['loop_file'],
                                                 remove_random_angle=args.remove_random_angle,
@@ -131,15 +133,19 @@ def main_process(gpu, weights_path, args):
                                              train=False, loop_file='loop_GT_4m',
                                              remove_random_angle=args.remove_random_angle,
                                              without_ground=args.without_ground)
+    elif args.dataset == 'astral':
+        validation_dataset = AstralPoses(args.root_folder, args.sensor_name, args.location,
+                                         train=False, loop_file='loop_GT_4m',
+                                         remove_random_angle=args.remove_random_angle)
     else:
         raise argparse.ArgumentTypeError("Unknown dataset")
 
-    ValidationLoader = torch.utils.data.DataLoader(dataset=validation_dataset,
-                                            batch_size=exp_cfg['batch_size'],
-                                            num_workers=2,
-                                            shuffle=False,
-                                            collate_fn=merge_inputs,
-                                            pin_memory=True)
+    validation_loader = torch.utils.data.DataLoader(dataset=validation_dataset,
+                                                    batch_size=exp_cfg['batch_size'],
+                                                    num_workers=2,
+                                                    shuffle=False,
+                                                    collate_fn=merge_inputs,
+                                                    pin_memory=True)
 
     model = get_model(exp_cfg, is_training=False)
     renamed_dict = OrderedDict()
@@ -175,7 +181,7 @@ def main_process(gpu, weights_path, args):
         rot_errors.append([])
         transl_errors.append([])
 
-    for batch_idx, sample in enumerate(tqdm(ValidationLoader)):
+    for batch_idx, sample in enumerate(tqdm(validation_loader)):
 
         model.eval()
         time1 = time.time()
@@ -244,6 +250,8 @@ if __name__ == '__main__':
     parser.add_argument('--validation_sequence', type=str, default='08')
     parser.add_argument('--without_ground', action='store_true', default=False,
                         help='Use preprocessed point clouds with ground plane removed')
+    parser.add_argument('--sensor_name', type=str, default='ld_cc', help='Name of lidar sensor in an Astral dataset')
+    parser.add_argument('--location', type=str, default='smirnova', help='Name of location for GNSS')
     args = parser.parse_args()
 
     main_process(0, args.weights_path, args)

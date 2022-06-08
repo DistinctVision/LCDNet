@@ -322,10 +322,10 @@ def main_process(gpu, exp_cfg, common_seed, world_size, args):
     if args.wandb and rank == 0:
         wandb.init(project="deep_lcd", name=dt_string, config=exp_cfg)
 
-    if args.dataset == 'kitti':
+    if args.astral_dataset == 'kitti':
         sequences_training = ["05", "06", "07", "09"]
         sequences_validation = ["00", "08"]
-    elif args.dataset == 'kitti360':
+    elif args.astral_dataset == 'kitti360':
         sequences_training = ["2013_05_28_drive_0000_sync", "2013_05_28_drive_0004_sync",
                               "2013_05_28_drive_0005_sync", "2013_05_28_drive_0006_sync"]
         sequences_validation = ["2013_05_28_drive_0002_sync", "2013_05_28_drive_0009_sync"]
@@ -336,7 +336,7 @@ def main_process(gpu, exp_cfg, common_seed, world_size, args):
     # sequences_training = ["09"]
     # sequences_validation = ["09"]
 
-    if args.dataset == 'kitti':
+    if args.astral_dataset == 'kitti':
         training_dataset, dataset_list_train = datasets_concat_kitti(args.root_folder,
                                                                      sequences_training,
                                                                      data_transform,
@@ -350,7 +350,7 @@ def main_process(gpu, exp_cfg, common_seed, world_size, args):
         dataset_for_recall = KITTILoader3DPoses(args.root_folder, sequences_validation[0],
                                                 os.path.join(args.root_folder, 'sequences', sequences_validation[0], 'poses.txt'),
                                                 train=False, loop_file=exp_cfg['loop_file'], without_ground=args.without_ground)
-    elif args.dataset == 'kitti360':
+    elif args.astral_dataset == 'kitti360':
         training_dataset, dataset_list_train = datasets_concat_kitti360(args.root_folder,
                                                                         sequences_training,
                                                                         data_transform,

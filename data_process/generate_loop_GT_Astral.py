@@ -6,7 +6,6 @@ from mldatatools.dataset import Dataset
 from pytransform3d import transformations as pt
 import mldatatools.utils.map as map_tool
 from torch.utils.data import Dataset as TorchDataset
-import os
 from sklearn.neighbors import KDTree
 import pickle
 import numpy as np
@@ -58,11 +57,9 @@ class GtIndicesAstralDataset(TorchDataset):
         self.frames_with_gt = []
 
         tm = self.dataset.annotation.tf.manager
-        print(self.dataset.annotation.tf)
         poses = []
 
         for frame_idx in range(len(self.dataset.frames)):
-            frame = self.dataset.get_frame(frame_idx, follow_id=True)
             position = positions[frame_idx]
             rotation = rotations[frame_idx]
             tm.add_transform('gps', 'map', pt.transform_from_pq((*position, *rotation,)),)
@@ -122,6 +119,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_id', default='', help='Dataset id')
     parser.add_argument('--dataset_path', default='', help='Dataset id')
+    parser.add_argument('--location', type=str, default='smirnova', help='Name of location for GNSS')
+    parser.add_argument('--sensor_name', type=str, default='ld_cc', help='Name of lidar sensor in an Astral dataset')
     args = parser.parse_args()
 
     if args.dataset_id:
@@ -131,7 +130,7 @@ if __name__ == '__main__':
         dataset_path = Path(args.dataset_path)
     else:
         raise 'Dataset is not set'
-    dataset = GtIndicesAstralDataset(dataset_path, 'ld_cc', 'smirnova', 4, 10, (6, 10))
+    dataset = GtIndicesAstralDataset(dataset_path, args.sensor_name, args.location, 4, 10, (6, 10))
 
     lc_gt = []
     lc_gt_file = dataset_path / 'loop_GT_4m.pickle'
