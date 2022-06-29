@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 from datasets.KITTI360Dataset import KITTI3603DPoses
 from datasets.KITTIDataset import KITTILoader3DPoses
-from datasets.astral_datasets import AstralPoses
+from datasets.astral_dataset_reader import AstralPoses
 from evaluation.plot_PR_curve import compute_PR, compute_AP, compute_PR_pairs
 from models.get_models import get_model
 from utils.data import merge_inputs
