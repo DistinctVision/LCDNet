@@ -316,7 +316,6 @@ def main_process(gpu, weights_path, args):
 
                 current_frame += batch_dict['batch_size'] // 2
 
-
     print(weights_path)
     print(exp_cfg['test_sequence'])
 
