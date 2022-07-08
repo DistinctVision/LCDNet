@@ -1,13 +1,9 @@
-import argparse
-import os
 from typing import Union, Optional, List, Tuple, Dict
 from pathlib import Path
-import time
 from collections import OrderedDict
 from copy import copy
 from attrs import define
 
-import faiss
 import open3d as o3d
 if hasattr(o3d, 'pipelines'):
     reg_module = o3d.pipelines.registration
@@ -17,22 +13,20 @@ import numpy as np
 import torch
 import torch.nn.parallel
 import torch.utils.data
-import random
 
 import clearml
 
 from tqdm import tqdm
 from pcdet.datasets.kitti.kitti_dataset import KittiDataset
 from datasets.astral_dataset_reader import AstralDatasetReader
+from mldatatools.dataset import Dataset, PointCloudMsg, PointCloudMsgData, Frame, GlobalPoseMsg, \
+    NumpyAnnotation, NumpyFileAnnotation, MessageAnnotation
+from mldatatools.dataset.entity import EntityIDCollection
 
 from models.get_models import get_model
 
-import cv2
 from mldatatools.utils import v3d
 from mldatatools.utils.visualizer3d import Visualizer3d
-
-import plotly.graph_objects as go
-
 
 import rospy
 import sensor_msgs.msg as sensor_msgs
@@ -50,12 +44,10 @@ class FrameRecord:
     point_features: reg_module.Feature
 
 
-def record_embeddings(dataset: AstralDatasetReader, weights_path: Union[Path, str], visualize: bool):
-    try:
-        rospy.wait_for_service('/lidar_apollo_instance_segmentation/dynamic_objects', timeout=rospy.Duration(secs=3))
-    except Exception:
-        print('Not found service: /lidar_apollo_instance_segmentation/dynamic_objects')
-        return
+def record_embeddings(dataset_reader: AstralDatasetReader, writer: Optional[Dataset],
+                      weights_path: Union[Path, str] = 'checkpoints/LCDNet-kitti360.tar',
+                      visualize: bool = False):
+    rospy.wait_for_service('/lidar_apollo_instance_segmentation/dynamic_objects', timeout=rospy.Duration(secs=3))
     lidar_segmentation_service = rospy.ServiceProxy('/lidar_apollo_instance_segmentation/dynamic_objects',
                                                     starline_msgs.srv.Cloud2DynamicObjects)
 
@@ -97,7 +89,7 @@ def record_embeddings(dataset: AstralDatasetReader, weights_path: Union[Path, st
     ui_pcd_id: Optional[str] = None
     visualizer = None
 
-    key_distance_step = 10.0
+    key_distance_step = 20.0
 
     semantic_colors = [(1, 1, 1),  # UNKNOWN
                        (0, 1, 0),  # CAR
@@ -115,13 +107,24 @@ def record_embeddings(dataset: AstralDatasetReader, weights_path: Union[Path, st
 
     ui_dynamic_objects = []
 
-    frame_records: List[FrameRecord] = []
+    lidar_data_path: Optional[Path] = None
+    if writer:
+        gnss_sensor = dataset_reader.gnss
+        gnss_sensor = writer.annotation.add_sensor(gnss_sensor, increment_id=True)
+        lidar_sensor = dataset_reader.sensors['ld_cc']
+        lidar_sensor = writer.annotation.add_sensor(lidar_sensor, increment_id=True)
+        lidar_data_path = Path(lidar_sensor.name)
+        (writer.root_dir / lidar_data_path).mkdir()
+        features_data_path = Path(f'{lidar_sensor.name}_features')
+        (writer.root_dir / features_data_path).mkdir()
+
+    frame_id = 0
 
     with torch.no_grad():
-        for i in tqdm(range(len(dataset))):
-            dataset.update_transform(i)
+        for i in tqdm(range(len(dataset_reader))):
+            dataset_reader.update_transform(i)
 
-            frame_transform = dataset.transform_manager.get_transform('ld_cc', 'map')
+            frame_transform = dataset_reader.transform_manager.get_transform('ld_cc', 'map')
             position = v3d.create(*frame_transform[:3, 3])
 
             if prev_position is not None:
@@ -129,15 +132,15 @@ def record_embeddings(dataset: AstralDatasetReader, weights_path: Union[Path, st
                 if key_frame_distance < key_distance_step:
                     continue
 
-            data = dataset[i]
+            frame_data = dataset_reader[i]
 
-            pcd = data['ld_cc']
+            pcd = frame_data['ld_cc']
             f_cloud_msg = array_to_pointcloud2(pcd.astype(np.float32), ['x', 'y', 'z', 'intensity'], frame_id='ld_cc')
             segmentation = lidar_segmentation_service(f_cloud_msg)
             for f_obj in segmentation.objects.feature_objects:
                 aabb = f_obj.object.shape.aabb
                 pcd = pcd[np.logical_or(np.logical_or(pcd[:, 0] < aabb.min_x, pcd[:, 0] > aabb.max_x),
-                                            np.logical_or(pcd[:, 1] < aabb.min_y, pcd[:, 1] > aabb.max_y))]
+                                        np.logical_or(pcd[:, 1] < aabb.min_y, pcd[:, 1] > aabb.max_y))]
 
             query_pcd = torch.from_numpy(pcd).cuda()
             model_input = model.backbone.prepare_input(query_pcd)
@@ -153,13 +156,35 @@ def record_embeddings(dataset: AstralDatasetReader, weights_path: Union[Path, st
             points = batch_dict['point_coords'].view(batch_dict['batch_size'], -1, 4)
             point_features = batch_dict['point_features_NV'].squeeze(-1)
             points = points[0]
-            point_features = point_features[0]
+            point_features = point_features[0].cpu().numpy()
             point_cloud = o3d.geometry.PointCloud()
             point_cloud.points = o3d.utility.Vector3dVector(points[:, 1:].cpu().numpy())
 
             frame_record = FrameRecord(frame_transform, embedding, point_cloud, point_features)
-            frame_records.append(frame_record)
 
+            if writer:
+                astral_pc_msg = PointCloudMsg(id=-1, sensor_id=lidar_sensor.id, timestamp=0,
+                                              data=PointCloudMsgData.write(point_cloud,
+                                                                           lidar_data_path / f'{frame_id}.pcd',
+                                                                           writer.root_dir))
+
+                astral_pc_msg = writer.annotation.add_messages(astral_pc_msg, increment_id=True)
+                astral_geo_msg = GlobalPoseMsg(id=-1, sensor_id=gnss_sensor.id, timestamp=0,
+                                               data=frame_data['geo_pose'])
+                astral_geo_msg = writer.annotation.add_messages(astral_geo_msg, increment_id=True)
+
+                astral_embedding = MessageAnnotation(data=NumpyAnnotation(array=embedding),
+                                                     class_name='embedding')
+                astral_point_features = MessageAnnotation(data=NumpyFileAnnotation.write(point_features,
+                                                                                         (features_data_path / f'{frame_id}.npy'),
+                                                                                         writer.root_dir),
+                                                          class_name='pcd_features')
+                astral_frame = Frame(timestamp=0,
+                                     packages=[astral_embedding, astral_point_features],
+                                     msg_ids=EntityIDCollection([astral_geo_msg.id, astral_pc_msg.id]))
+                writer.frames.frames.append(astral_frame)
+
+            frame_id += 1
             prev_position = copy(position)
             if visualizer:
                 for ui_dynamic_obj in ui_dynamic_objects:
@@ -195,4 +220,4 @@ if __name__ == '__main__':
 
     dataset = AstralDatasetReader(dataset_path, args.location, ['ld_cc', 'fc_near'])
 
-    record_embeddings(dataset, args.weights_path, visualize=True)
+    record_embeddings(dataset, None, args.weights_path, visualize=True)

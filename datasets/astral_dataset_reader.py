@@ -44,13 +44,15 @@ class AstralDatasetReader(TorchDataset):
         frame = self.astral_dataset.get_frame(frame_index)
         self._update_transform_for_frame(frame)
 
-    def _update_transform_for_frame(self, frame: Frame):
-        geo_pose: GlobalPoseMsgData = self._get_msg_by_sensor(frame, self.gnss).value.data
+    def _update_transform_for_frame(self, frame: Frame) -> GlobalPoseMsgData:
+        geo_pose_msg: GlobalPoseMsg = self._get_msg_by_sensor(frame, self.gnss).value
+        geo_pose = geo_pose_msg.data
         position = map_tool.gps_to_local((geo_pose.position.latitude,
                                           geo_pose.position.longitude,
                                           geo_pose.position.altitude,), self.location)
         rotation = (geo_pose.orientation.w, geo_pose.orientation.x, geo_pose.orientation.y, geo_pose.orientation.z)
         self._transform_manager.add_transform('gps', 'map', pt.transform_from_pq((*position, *rotation,)),)
+        return geo_pose
 
     def _get_sensor_by_name(self, sensor_name: str) -> SensorT:
         return self.astral_dataset.annotation.sensors[
@@ -81,9 +83,9 @@ class AstralDatasetReader(TorchDataset):
 
     def __getitem__(self, item_index: int) -> dict:
         frame = self.astral_dataset.get_frame(item_index)
-        self._update_transform_for_frame(frame)
+        geo_pose = self._update_transform_for_frame(frame)
 
-        out = {}
+        out = {'geo_pose': geo_pose}
         for sensor_name, sensor in self.sensors.items():
             msg = self._get_msg_by_sensor(frame, sensor)
             out[sensor_name] = self._convert_known_msg(msg.value)

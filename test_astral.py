@@ -7,10 +7,8 @@ from collections import OrderedDict
 
 import faiss
 import open3d as o3d
-if hasattr(o3d, 'pipelines'):
-    reg_module = o3d.pipelines.registration
-else:
-    reg_module = o3d.registration
+reg_module = o3d.pipelines.registration
+
 import numpy as np
 import torch
 import torch.nn.parallel
@@ -22,6 +20,8 @@ import clearml
 from tqdm import tqdm
 from pcdet.datasets.kitti.kitti_dataset import KittiDataset
 from datasets.astral_dataset_reader import AstralDatasetReader
+from mldatatools.dataset import Dataset, Lidar, LidarConfig
+
 
 from models.get_models import get_model
 
@@ -31,7 +31,7 @@ from mldatatools.utils import v3d
 import plotly.graph_objects as go
 
 
-def main(dataset: AstralDatasetReader, weights_path: Union[Path, str]):
+def main(dataset: AstralDatasetReader, weights_path: Union[Path, str] = 'checkpoints/LCDNet-kitti360.tar'):
 
     saved_params = torch.load(weights_path, map_location='cpu')
 
@@ -89,7 +89,6 @@ def main(dataset: AstralDatasetReader, weights_path: Union[Path, str]):
                 if delta_distance < 2.0:
                     continue
 
-            image = data['fc_near']
             query_pcd = torch.from_numpy(data['ld_cc']).cuda()
             model_input = model.backbone.prepare_input(query_pcd)
 
@@ -152,7 +151,6 @@ def main(dataset: AstralDatasetReader, weights_path: Union[Path, str]):
                 if delta_distance < 2.0:
                     continue
 
-            image = data['fc_near']
             query_pcd = torch.from_numpy(data['ld_cc']).cuda()
             model_input = model.backbone.prepare_input(query_pcd)
 
@@ -224,7 +222,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_path', default='', help="Path to dataset")
     parser.add_argument('--dataset_id', default='', help='Dataset id')
-    parser.add_argument('--weights_path', default='', required=True, help='Path to model weights')
+    parser.add_argument('--weights_path', default='checkpoints/LCDNet-kitti360.tar', help='Path to model weights')
     args = parser.parse_args()
 
     if args.dataset_id:
@@ -235,6 +233,6 @@ if __name__ == '__main__':
     else:
         raise 'Dataset is not set - "dataset_path" or "dataset_id" argument is needed'
 
-    dataset = AstralDatasetReader(dataset_path, 'm11', ['ld_cc', 'fc_near'])
+    dataset = AstralDatasetReader(dataset_path, 'm11', ['ld_cc'])
 
-    main(dataset, args.weights_path)
+    main(dataset, args.weights_path, None)
