@@ -38,7 +38,7 @@ def main(dataset_reader: AstralDatasetReader, db_dataset_id: str):
             'distance': []
     }
     with torch.no_grad():
-        for i in tqdm(range(number_of_frames), 'train'):
+        for i in tqdm(range(169, number_of_frames), 'train'):
             data = dataset_reader[i]
 
             frame_transform = dataset_reader.transform_manager.get_transform('ld_cc', 'map')
@@ -46,7 +46,9 @@ def main(dataset_reader: AstralDatasetReader, db_dataset_id: str):
                                   frame_transform[1, 3],
                                   frame_transform[2, 3])
 
-            (geo_pose, delta_transform) = lcd_db[data['ld_cc']]
+            (geo_pose, delta_transform) = lcd_db(data['ld_cc'], i)
+            if geo_pose is None:
+                continue
             geo_position = map_tool.gps_to_local((geo_pose.position.latitude,
                                                   geo_pose.position.longitude,
                                                   geo_pose.position.altitude,), dataset_reader.location)
@@ -58,8 +60,15 @@ def main(dataset_reader: AstralDatasetReader, db_dataset_id: str):
             query_position = v3d.create(query_frame_transform[0, 3],
                                         query_frame_transform[1, 3],
                                         query_frame_transform[2, 3])
+            query_frame_transform = np.dot(query_frame_transform, np.linalg.inv(delta_transform))
+            query_position_1 = v3d.create(query_frame_transform[0, 3],
+                                          query_frame_transform[1, 3],
+                                          query_frame_transform[2, 3])
 
             distance = v3d.length(v3d.sub(query_position, position))
+            distance_1 = v3d.length(v3d.sub(query_position_1, position))
+
+            print(f'Found: {distance} {distance_1}')
             output['distance'].append(distance)
 
     fig = go.Figure()

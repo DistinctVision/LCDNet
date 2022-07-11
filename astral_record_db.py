@@ -89,7 +89,7 @@ def record_embeddings(dataset_reader: AstralDatasetReader, writer: Optional[Data
     ui_pcd_id: Optional[str] = None
     visualizer = None
 
-    key_distance_step = 20.0
+    key_distance_step = 10.0
 
     semantic_colors = [(1, 1, 1),  # UNKNOWN
                        (0, 1, 0),  # CAR
