@@ -38,7 +38,7 @@ def main(dataset_reader: AstralDatasetReader, db_dataset_id: str):
             'distance': []
     }
     with torch.no_grad():
-        for i in tqdm(range(169, number_of_frames), 'train'):
+        for i in tqdm(range(number_of_frames), 'train'):
             data = dataset_reader[i]
 
             frame_transform = dataset_reader.transform_manager.get_transform('ld_cc', 'map')

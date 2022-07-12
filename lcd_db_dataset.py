@@ -18,6 +18,10 @@ from mldatatools.utils.visualizer3d import Visualizer3d
 
 import hnswlib
 
+import rospy
+import starline_msgs.srv
+from utils.ros_utils import array_to_pointcloud2, pointcloud2_to_xyz_array
+
 
 MessageT = TypeVar('MessageT', bound=Message)
 SensorT = TypeVar('SensorT', bound=Sensor)
@@ -48,6 +52,10 @@ class LcdDbDataset:
         self.index = hnswlib.Index(space='l2', dim=256)
         self.index.init_index(len(self.embeddings))
         self.index.add_items(self.embeddings, indices)
+
+        rospy.wait_for_service('/lidar_apollo_instance_segmentation/dynamic_objects', timeout=rospy.Duration(secs=3))
+        self.lidar_segmentation_service = rospy.ServiceProxy('/lidar_apollo_instance_segmentation/dynamic_objects',
+                                                             starline_msgs.srv.Cloud2DynamicObjects)
 
         # self.visualizer = Visualizer3d()
         # self.visualizer.start()
@@ -112,6 +120,14 @@ class LcdDbDataset:
         return point_cloud, point_features
 
     def __call__(self, pcd: np.ndarray, gt_id: Optional[int]) -> Tuple[Optional[GlobalPoseMsgData], Optional[np.ndarray]]:
+
+        f_cloud_msg = array_to_pointcloud2(pcd.astype(np.float32), ['x', 'y', 'z', 'intensity'], frame_id='ld_cc')
+        segmentation = self.lidar_segmentation_service(f_cloud_msg)
+        for f_obj in segmentation.objects.feature_objects:
+            aabb = f_obj.object.shape.aabb
+            pcd = pcd[np.logical_or(np.logical_or(pcd[:, 0] < aabb.min_x, pcd[:, 0] > aabb.max_x),
+                                    np.logical_or(pcd[:, 1] < aabb.min_y, pcd[:, 1] > aabb.max_y))]
+
         train_pcd = torch.from_numpy(pcd).cuda()
         model_input = self.model.backbone.prepare_input(train_pcd)
 
