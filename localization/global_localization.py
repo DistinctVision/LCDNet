@@ -47,7 +47,7 @@ class GlobalLocalizer:
 
         self.db = LcdDbDataset(dataset_id, location)
 
-        self.step_distance = 1.5
+        self.step_distance = 2.0
         self.search_distance = 30.0
         self.rotation_threshold = rotation_threshold
         self.position_threshold = position_threshold
@@ -56,11 +56,12 @@ class GlobalLocalizer:
         self._actual_frames = []  # [{'query_pose': np.ndarray, 'odom_pose': np.ndarray, 'timestamp': int }]
         self._last_rotation_error = -1.0
         self._last_position_error = -1.0
+        self._last_success_rate = -1.0
 
     def stop(self):
         if self._ros_thread:
             self._ros_thread_data['stop'] = True
-            self._ros_thread.join()
+            self._ros_thread.join(timeout=5)
 
     def _star_apollo_service(self):
         self._ros_thread = threading.Thread(target=_ros_main_, args=(self._ros_thread_data,))
@@ -101,27 +102,33 @@ class GlobalLocalizer:
             delta_query_odom_pose = np.dot(delta_query_pose, np.linalg.inv(delta_odom_pose))
             _, _, _, delta_angle = rpt.axis_angle_from_matrix(delta_query_odom_pose[:3, :3])
             delta_angle *= 180.0 / math.pi
-            delta_position = v3d.length(delta_odom_pose[:3, 3])
-            self._last_rotation_error += delta_angle
-            self._last_position_error += delta_position
+            delta_position = v3d.length(self._get_position_from_tf(delta_odom_pose))
             if delta_angle < self.rotation_threshold and delta_position < self.position_threshold:
+                self._last_rotation_error += delta_angle
+                self._last_position_error += delta_position
                 n_success += 1
             else:
                 n_fail += 1
-        if (n_success + n_fail) > 0:
-            self._last_rotation_error /= (n_success + n_fail)
-            self._last_position_error /= (n_success + n_fail)
+        if n_success > 0:
+            self._last_rotation_error /= n_success
+            self._last_position_error /= n_success
+            self._last_success_rate = n_success / (n_success + n_fail)
         else:
             self._last_rotation_error, self._last_position_error = -1.0, -1.0
+            self._last_success_rate = -1.0
         return n_success, n_fail
 
     @property
-    def last_rotation_error(self):
+    def last_rotation_error(self) -> float:
         return self._last_rotation_error
 
     @property
-    def last_position_error(self):
+    def last_position_error(self) -> float:
         return self._last_position_error
+
+    @property
+    def last_success_rate(self) -> float:
+        return self._last_success_rate
 
     def localize(self, pcd: np.ndarray, odom_pose: np.ndarray, timestamp: int = -1) -> Optional[np.ndarray]:
         nearest_distance = self._filter_far_frames(self._get_position_from_tf(odom_pose))

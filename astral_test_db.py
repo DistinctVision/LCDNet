@@ -32,30 +32,37 @@ def main(dataset_reader: AstralDatasetReader, db_dataset_id: str):
     number_of_frames = min(3000, len(dataset_reader))
 
     output: Dict[str, List[float]] = {
-            'delta': []
+        'delta': [],
+        'rotation_error': [],
+        'position_error': [],
+        'success_rate': []
     }
     with torch.no_grad():
-        for i in tqdm(range(number_of_frames), 'train'):
+        for i in tqdm(range(3, number_of_frames, 10), 'train'):
             data = dataset_reader[i]
 
             frame_transform = dataset_reader.transform_manager.get_transform('ld_cc', 'map')
             frame_position = v3d.create(*frame_transform[:3, 3])
 
             query_transform = localizer.localize(data['ld_cc'], frame_transform)
+            output['rotation_error'].append(localizer.last_rotation_error)
+            output['position_error'].append(localizer.last_position_error)
+            output['success_rate'].append(localizer.last_success_rate)
             if query_transform is None:
                 output['delta'].append(-1.0)
                 continue
             query_position = v3d.create(*query_transform[:3, 3])
             delta = v3d.length(v3d.sub(frame_position, query_position))
             output['delta'].append(delta)
-
-    localizer.stop()
+            print(delta)
 
     fig = go.Figure()
-    size = len(output['distance'])
+    size = len(output['delta'])
     for out_name, out_list in output.items():
         fig.add_trace(go.Scatter(x=np.arange(size), y=out_list, mode='lines', name=out_name))
     fig.show()
+
+    localizer.stop()
 
 
 if __name__ == '__main__':

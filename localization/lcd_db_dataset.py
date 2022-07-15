@@ -172,12 +172,12 @@ class LcdDbDataset:
 
         if result.fitness < 0.8 or result.inlier_rmse > 1.1:
             return None, None
-        query_point_cloud.transform(result.transformation)
+        # query_point_cloud.transform(result.transformation)
         # self.visualizer.add_geometry(train_point_cloud, 'train')
         # self.visualizer.add_geometry(query_point_cloud, 'query')
         # print(f'Fitness: {result.fitness}, rmse: {result.inlier_rmse}, d: {query_distance}',
         #       f'{distance_to_second_query}')
-        return self.geo_poses[query_id], result.transformation
+        return self.geo_poses[query_id], np.linalg.inv(result.transformation)
 
 
 
