@@ -14,13 +14,11 @@ from pcdet.datasets.kitti.kitti_dataset import KittiDataset
 from mldatatools.dataset import Dataset
 from mldatatools.dataset import Frame, Message, Sensor, NumpyAnnotation, NumpyFileAnnotation, GlobalPoseMsgData
 
-from mldatatools.utils.visualizer3d import Visualizer3d
-
 import hnswlib
 
 import rospy
 import starline_msgs.srv
-from utils.ros_utils import array_to_pointcloud2, pointcloud2_to_xyz_array
+from utils.ros_utils import array_to_pointcloud2
 
 
 MessageT = TypeVar('MessageT', bound=Message)
@@ -96,7 +94,8 @@ class LcdDbDataset:
 
         return model
 
-    def _get_embedding_from_frame(self, frame: Frame) -> Optional[NumpyAnnotation]:
+    @staticmethod
+    def _get_embedding_from_frame(frame: Frame) -> Optional[NumpyAnnotation]:
         for pkg in frame.packages:
             if pkg.class_name == 'embedding':
                 return pkg.data
@@ -106,20 +105,21 @@ class LcdDbDataset:
         return self.astral_dataset.annotation.sensors[
             [x.name for x in self.astral_dataset.annotation.sensors].index(sensor_name)]
 
-    def _get_msg_by_sensor(self, frame: Frame, sensor: Sensor) -> MessageT:
+    @staticmethod
+    def _get_msg_by_sensor(frame: Frame, sensor: Sensor) -> MessageT:
         return frame.msg_ids[[msg.value.sensor_id for msg in frame.msg_ids].index(sensor.id)].value
 
     def _get_data_for_frame(self, frame_index: int) -> Tuple[o3d.geometry.PointCloud, reg_module.Feature]:
         frame = self.astral_dataset.get_frame(frame_index)
         point_cloud_msg = self._get_msg_by_sensor(frame, self.lidar)
         point_cloud = point_cloud_msg.data.load(self.astral_dataset.root_dir, remove_nan_points=True)
-        point_features: reg_module.Feature = None
+        point_features: Optional[reg_module.Feature] = None
         for pkg in frame.packages:
             if pkg.class_name == 'pcd_features':
                 point_features = pkg.data.load(self.astral_dataset.root_dir)
         return point_cloud, point_features
 
-    def __call__(self, pcd: np.ndarray, gt_id: Optional[int]) -> Tuple[Optional[GlobalPoseMsgData], Optional[np.ndarray]]:
+    def __call__(self, pcd: np.ndarray) -> Tuple[Optional[GlobalPoseMsgData], Optional[np.ndarray]]:
 
         f_cloud_msg = array_to_pointcloud2(pcd.astype(np.float32), ['x', 'y', 'z', 'intensity'], frame_id='ld_cc')
         segmentation = self.lidar_segmentation_service(f_cloud_msg)
@@ -139,11 +139,8 @@ class LcdDbDataset:
         batch_dict = self.model(model_input, metric_head=False, compute_rotation=False, compute_transl=False)
         embedding = batch_dict['out_embedding'][0].cpu().numpy()
 
-        query_id, query_distance = self.index.knn_query(embedding, k=2)
-        second_query_id = query_id[0][1]
+        query_id, query_distance = self.index.knn_query(embedding, k=1)
         query_id, query_distance = query_id[0][0], query_distance[0][0]
-
-        distance_to_second_query = np.linalg.norm(self.embeddings[second_query_id] - self.embeddings[query_id])
 
         coords = batch_dict['point_coords'].view(batch_dict['batch_size'], -1, 4)
         point_features = batch_dict['point_features_NV'].squeeze(-1)
@@ -171,15 +168,15 @@ class LcdDbDataset:
                 10.0,
                 reg_module.TransformationEstimationPointToPoint(False),
                 3, [],
-                reg_module.RANSACConvergenceCriteria(30000))
+                reg_module.RANSACConvergenceCriteria(max_iteration=1000, confidence=1.0))
 
         if result.fitness < 0.8 or result.inlier_rmse > 1.1:
             return None, None
         query_point_cloud.transform(result.transformation)
         # self.visualizer.add_geometry(train_point_cloud, 'train')
         # self.visualizer.add_geometry(query_point_cloud, 'query')
-        print(f'Fitness: {result.fitness}, rmse: {result.inlier_rmse}, d: {query_distance}',
-              f'{distance_to_second_query}')
+        # print(f'Fitness: {result.fitness}, rmse: {result.inlier_rmse}, d: {query_distance}',
+        #       f'{distance_to_second_query}')
         return self.geo_poses[query_id], result.transformation
 
 

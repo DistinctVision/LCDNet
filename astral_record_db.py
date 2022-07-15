@@ -160,7 +160,7 @@ def record_embeddings(dataset_reader: AstralDatasetReader, writer: Optional[Data
             point_cloud = o3d.geometry.PointCloud()
             point_cloud.points = o3d.utility.Vector3dVector(points[:, 1:].cpu().numpy())
 
-            frame_record = FrameRecord(frame_transform, embedding, point_cloud, point_features)
+            # frame_record = FrameRecord(frame_transform, embedding, point_cloud, point_features)
 
             if writer:
                 astral_pc_msg = PointCloudMsg(id=-1, sensor_id=lidar_sensor.id, timestamp=0,

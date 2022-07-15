@@ -1,4 +1,4 @@
-from typing import Union, Optional, List, Tuple, Dict
+from typing import List, Dict
 from pathlib import Path
 
 import open3d as o3d
@@ -19,57 +19,37 @@ from pytransform3d import transformations as pt
 
 import mldatatools.utils.map as map_tool
 from mldatatools.utils import v3d
-from mldatatools.utils.visualizer3d import Visualizer3d
 
 import plotly.graph_objects as go
 
-from lcd_db_dataset import LcdDbDataset
+from localization.global_localization import GlobalLocalizer
 
 
 def main(dataset_reader: AstralDatasetReader, db_dataset_id: str):
 
-    lcd_db = LcdDbDataset(db_dataset_id, location=dataset_reader.location)
-
-    db_transform_manager = deepcopy(dataset_reader.transform_manager)
+    localizer = GlobalLocalizer(db_dataset_id, location=dataset_reader.location)
 
     number_of_frames = min(3000, len(dataset_reader))
 
     output: Dict[str, List[float]] = {
-            'distance': []
+            'delta': []
     }
     with torch.no_grad():
         for i in tqdm(range(number_of_frames), 'train'):
             data = dataset_reader[i]
 
             frame_transform = dataset_reader.transform_manager.get_transform('ld_cc', 'map')
-            position = v3d.create(frame_transform[0, 3],
-                                  frame_transform[1, 3],
-                                  frame_transform[2, 3])
+            frame_position = v3d.create(*frame_transform[:3, 3])
 
-            (geo_pose, delta_transform) = lcd_db(data['ld_cc'], i)
-            if geo_pose is None:
+            query_transform = localizer.localize(data['ld_cc'], frame_transform)
+            if query_transform is None:
+                output['delta'].append(-1.0)
                 continue
-            geo_position = map_tool.gps_to_local((geo_pose.position.latitude,
-                                                  geo_pose.position.longitude,
-                                                  geo_pose.position.altitude,), dataset_reader.location)
-            geo_rotation = (geo_pose.orientation.w, geo_pose.orientation.x,
-                            geo_pose.orientation.y, geo_pose.orientation.z)
-            db_transform_manager.add_transform('gps', 'map', pt.transform_from_pq((*geo_position, *geo_rotation,)),)
+            query_position = v3d.create(*query_transform[:3, 3])
+            delta = v3d.length(v3d.sub(frame_position, query_position))
+            output['delta'].append(delta)
 
-            query_frame_transform = db_transform_manager.get_transform('ld_cc', 'map')
-            query_position = v3d.create(query_frame_transform[0, 3],
-                                        query_frame_transform[1, 3],
-                                        query_frame_transform[2, 3])
-            query_frame_transform = np.dot(query_frame_transform, np.linalg.inv(delta_transform))
-            query_position_1 = v3d.create(query_frame_transform[0, 3],
-                                          query_frame_transform[1, 3],
-                                          query_frame_transform[2, 3])
-
-            distance = v3d.length(v3d.sub(query_position, position))
-            distance_1 = v3d.length(v3d.sub(query_position_1, position))
-
-            print(f'Found: {distance} {distance_1}')
-            output['distance'].append(distance)
+    localizer.stop()
 
     fig = go.Figure()
     size = len(output['distance'])
