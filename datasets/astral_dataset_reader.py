@@ -11,7 +11,7 @@ from pytransform3d import transformations as pt
 from pytransform3d.transform_manager import TransformManager
 import mldatatools.utils.map as map_tool
 from mldatatools.dataset import Frame, Message, Sensor, PointCloudMsg, ImageMsg, \
-    GlobalPosition, GNSSMsg, ImuMsg, GNSSMsgData, ImuMsgData, GlobalPoseMsg, GlobalPoseMsgData
+    GlobalPosition, GNSSMsg, ImuMsg, GNSSMsgData, ImuMsgData, GlobalPoseMsg, GlobalPoseMsgData, Annotation
 from torch.utils.data import Dataset as TorchDataset
 
 
@@ -37,6 +37,10 @@ class AstralDatasetReader(TorchDataset):
         self._transform_manager = self.astral_dataset.annotation.tf.manager
 
     @property
+    def annotation(self) -> Annotation:
+        return self.astral_dataset.annotation
+
+    @property
     def transform_manager(self) -> TransformManager:
         return self._transform_manager
 
@@ -51,6 +55,7 @@ class AstralDatasetReader(TorchDataset):
                                           geo_pose.position.longitude,
                                           geo_pose.position.altitude,), self.location)
         rotation = (geo_pose.orientation.w, geo_pose.orientation.x, geo_pose.orientation.y, geo_pose.orientation.z)
+        t = pt.transform_from_pq((*position, *rotation,))
         self._transform_manager.add_transform('gps', 'map', pt.transform_from_pq((*position, *rotation,)),)
         return geo_pose
 

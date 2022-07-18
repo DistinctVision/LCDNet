@@ -25,9 +25,10 @@ import plotly.graph_objects as go
 from localization.global_localization import GlobalLocalizer
 
 
-def main(dataset_reader: AstralDatasetReader, db_dataset_id: str):
+def main(dataset_reader: AstralDatasetReader, db_dataset_id: str, start_frame: int = 0, frame_step: int = 1):
 
     localizer = GlobalLocalizer(db_dataset_id, location=dataset_reader.location)
+    # localizer.db.transform_manager = dataset_reader.transform_manager
 
     number_of_frames = min(3000, len(dataset_reader))
 
@@ -38,7 +39,8 @@ def main(dataset_reader: AstralDatasetReader, db_dataset_id: str):
         'success_rate': []
     }
     with torch.no_grad():
-        for i in tqdm(range(3, number_of_frames, 10), 'train'):
+        progress_bar = tqdm(range(start_frame, number_of_frames, frame_step), '')
+        for i in progress_bar:
             data = dataset_reader[i]
 
             frame_transform = dataset_reader.transform_manager.get_transform('ld_cc', 'map')
@@ -49,12 +51,18 @@ def main(dataset_reader: AstralDatasetReader, db_dataset_id: str):
             output['position_error'].append(localizer.last_position_error)
             output['success_rate'].append(localizer.last_success_rate)
             if query_transform is None:
+                progress_bar.set_description(f'rotation error: {localizer.last_rotation_error}, '
+                                             f'position error: {localizer.last_position_error}, '
+                                             f'success_rate: {localizer.last_success_rate}')
                 output['delta'].append(-1.0)
                 continue
             query_position = v3d.create(*query_transform[:3, 3])
             delta = v3d.length(v3d.sub(frame_position, query_position))
             output['delta'].append(delta)
-            print(delta)
+            progress_bar.set_description(f'rotation error: {localizer.last_rotation_error}, '
+                                         f'position error: {localizer.last_position_error}, '
+                                         f'success_rate: {localizer.last_success_rate},'
+                                         f'delta: {delta}')
 
     fig = go.Figure()
     size = len(output['delta'])
@@ -72,6 +80,8 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_id', default='', help='Dataset id')
     parser.add_argument('--db_dataset_id', default='', required=True)
     parser.add_argument('--location', default='m11', help='A location for a GNSS data')
+    parser.add_argument('--start_frame', default=0, type=int, help='An index of a dataset start frame')
+    parser.add_argument('--frame_step', default=1, type=int, help='A testing of every nth frame')
     args = parser.parse_args()
 
     if args.dataset_id:
@@ -84,4 +94,4 @@ if __name__ == '__main__':
 
     dataset = AstralDatasetReader(dataset_path, args.location, ['ld_cc'])
 
-    main(dataset, args.db_dataset_id)
+    main(dataset, args.db_dataset_id, args.start_frame, args.frame_step)

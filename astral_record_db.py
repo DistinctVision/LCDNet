@@ -1,3 +1,4 @@
+import time
 from typing import Union, Optional, List, Tuple, Dict
 from pathlib import Path
 from collections import OrderedDict
@@ -35,6 +36,9 @@ import starline_msgs.srv
 
 from utils.ros_utils import array_to_pointcloud2, pointcloud2_to_xyz_array
 
+from localization.global_localization import check_lidar_apollo_segmentation_service, ros_main_lidar_apollo_segmentation
+import threading
+
 
 @define
 class FrameRecord:
@@ -46,7 +50,16 @@ class FrameRecord:
 
 def record_embeddings(dataset_reader: AstralDatasetReader, writer: Optional[Dataset],
                       weights_path: Union[Path, str] = 'checkpoints/LCDNet-kitti360.tar',
+                      key_step_distance: float = 5.0,
                       visualize: bool = False):
+    ros_thread_data = None
+    if not check_lidar_apollo_segmentation_service():
+        ros_thread_data = {'stop': False}
+        ros_thread_data['thread'] = threading.Thread(target=ros_main_lidar_apollo_segmentation,
+                                                     args=(ros_thread_data,))
+        ros_thread_data['thread'].start()
+        time.sleep(7.0)
+
     rospy.wait_for_service('/lidar_apollo_instance_segmentation/dynamic_objects', timeout=rospy.Duration(secs=3))
     lidar_segmentation_service = rospy.ServiceProxy('/lidar_apollo_instance_segmentation/dynamic_objects',
                                                     starline_msgs.srv.Cloud2DynamicObjects)
@@ -89,8 +102,6 @@ def record_embeddings(dataset_reader: AstralDatasetReader, writer: Optional[Data
     ui_pcd_id: Optional[str] = None
     visualizer = None
 
-    key_distance_step = 10.0
-
     semantic_colors = [(1, 1, 1),  # UNKNOWN
                        (0, 1, 0),  # CAR
                        (0.5, 1, 0),  # TRUCK
@@ -129,7 +140,7 @@ def record_embeddings(dataset_reader: AstralDatasetReader, writer: Optional[Data
 
             if prev_position is not None:
                 key_frame_distance = v3d.length(v3d.sub(prev_position, position))
-                if key_frame_distance < key_distance_step:
+                if key_frame_distance < key_step_distance:
                     continue
 
             frame_data = dataset_reader[i]
@@ -199,6 +210,9 @@ def record_embeddings(dataset_reader: AstralDatasetReader, writer: Optional[Data
                     cube.translate((aabb.min_x, aabb.min_y, 1.0))
                     cube.paint_uniform_color(semantic_colors[f_obj.object.semantic.type])
                     ui_dynamic_objects.append(visualizer.add_geometry(cube, 'obj'))
+    if ros_thread_data:
+        ros_thread_data['stop'] = True
+        ros_thread_data['thread'].join(timeout=5)
 
 
 if __name__ == '__main__':
@@ -206,8 +220,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_path', default='', help="Path to dataset")
     parser.add_argument('--dataset_id', default='', help='Dataset id')
-    parser.add_argument('--weights_path', default='checkpoints/LCDNet-kitti360.tar', help='Path to model weights')
     parser.add_argument('--location', type=str, default='m11', help='A location name for GNSS')
+    parser.add_argument('--key_step_distance', type=float, default=5.0, help='Distance between key frames')
     args = parser.parse_args()
 
     if args.dataset_id:
@@ -220,4 +234,5 @@ if __name__ == '__main__':
 
     dataset = AstralDatasetReader(dataset_path, args.location, ['ld_cc', 'fc_near'])
 
-    record_embeddings(dataset, None, args.weights_path, visualize=True)
+    record_embeddings(dataset, None, 'checkpoints/LCDNet-kitti360.tar',
+                      key_step_distance=args.key_step_distance, visualize=True)

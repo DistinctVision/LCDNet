@@ -4,6 +4,7 @@ import click
 import clearml
 import attrs
 import tempfile
+from copy import deepcopy
 
 from datasets.astral_dataset_reader import AstralDatasetReader
 from mldatatools.dataset import Dataset, FramesInfo, Frames
@@ -59,6 +60,7 @@ def main(
         db_dataset.frames = FramesInfo(Frames())
 
     record_embeddings(dataset_reader, db_dataset, visualize=False)
+    db_dataset.annotation.tf = deepcopy(dataset_reader.annotation.tf)
     db_dataset.write()
 
     # Save new dataset to clearml

@@ -22,7 +22,17 @@ from mldatatools.utils import v3d
 from localization.lcd_db_dataset import LcdDbDataset
 
 
-def _ros_main_(data: dict):
+def check_lidar_apollo_segmentation_service() -> bool:
+    try:
+        rosgraph.Master('/rostopic').getPid()
+    except socket.error:
+        return False
+
+    service_list = rosservice.get_service_list()
+    return service_list.index('/lidar_apollo_instance_segmentation/dynamic_objects') >= 0
+
+
+def ros_main_lidar_apollo_segmentation(data: dict):
     stream = os.popen('roslaunch lidar_apollo_instance_segmentation debug_lidar_apollo_instance_segmentation.launch')
     while (line := stream.readline()) and not data['stop']:
         print(line)
@@ -34,12 +44,12 @@ class GlobalLocalizer:
                  dataset_id: Union[Path, str],
                  location: str,
                  rotation_threshold: float = 5.0,  # in degrees
-                 position_threshold: float = 0.5,  # in meters
+                 position_threshold: float = 2.0,  # in meters
                  min_number_of_success_nodes: int = 3,
                  success_rate_threshold: float = 0.7):
         self._ros_thread = None
-        self._ros_thread_data = {'stop': False }
-        if not self._check_apollo_service():
+        self._ros_thread_data = {'stop': False}
+        if not check_lidar_apollo_segmentation_service():
             print('Apollo service is not started. Starting...')
             self._star_apollo_service()
         else:
@@ -64,18 +74,8 @@ class GlobalLocalizer:
             self._ros_thread.join(timeout=5)
 
     def _star_apollo_service(self):
-        self._ros_thread = threading.Thread(target=_ros_main_, args=(self._ros_thread_data,))
+        self._ros_thread = threading.Thread(target=ros_main_lidar_apollo_segmentation, args=(self._ros_thread_data,))
         self._ros_thread.start()
-
-    @staticmethod
-    def _check_apollo_service() -> bool:
-        try:
-            rosgraph.Master('/rostopic').getPid()
-        except socket.error:
-            return False
-
-        service_list = rosservice.get_service_list()
-        return service_list.index('/lidar_apollo_instance_segmentation/dynamic_objects') >= 0
 
     @staticmethod
     def _get_position_from_tf(transform: np.ndarray) -> v3d.Vector3d:
@@ -97,12 +97,13 @@ class GlobalLocalizer:
         self._last_rotation_error, self._last_position_error = 0.0, 0.0
         n_success, n_fail = 0, 0
         for actual_frame in self._actual_frames:
-            delta_query_pose = np.dot(query_pose, np.linalg.inv(actual_frame['query_pose']))
             delta_odom_pose = np.dot(odom_pose, np.linalg.inv(actual_frame['odom_pose']))
-            delta_query_odom_pose = np.dot(delta_query_pose, np.linalg.inv(delta_odom_pose))
-            _, _, _, delta_angle = rpt.axis_angle_from_matrix(delta_query_odom_pose[:3, :3])
+            query_pose_1 = np.dot(delta_odom_pose, actual_frame['query_pose'])
+            diff_query_pose = np.dot(query_pose, np.linalg.inv(query_pose_1))
+            _, _, _, delta_angle = rpt.axis_angle_from_matrix(diff_query_pose[:3, :3])
             delta_angle *= 180.0 / math.pi
-            delta_position = v3d.length(self._get_position_from_tf(delta_odom_pose))
+            delta_position = v3d.length(v3d.sub(self._get_position_from_tf(query_pose_1),
+                                                self._get_position_from_tf(query_pose)))
             if delta_angle < self.rotation_threshold and delta_position < self.position_threshold:
                 self._last_rotation_error += delta_angle
                 self._last_position_error += delta_position
@@ -144,14 +145,15 @@ class GlobalLocalizer:
         geo_rotation = (geo_pose.orientation.w, geo_pose.orientation.x,
                         geo_pose.orientation.y, geo_pose.orientation.z)
         query_pose = pt.transform_from_pq((*geo_position, *geo_rotation,))
+        query_pose = np.dot(query_pose, self.db.transform_manager.get_transform('ld_cc', 'gps'))
         query_pose = np.dot(query_pose, delta_transform)
 
         n_success, n_fail = self._compare_frame_pose(query_pose, odom_pose)
         success_rate = n_success / (n_success + n_fail) if (n_success + n_fail) else -1.0
 
         self._actual_frames.append({
-            'query_pose': query_pose,
-            'odom_pose': odom_pose,
+            'query_pose': query_pose.copy(),
+            'odom_pose': odom_pose.copy(),
             'timestamp': timestamp
         })
 

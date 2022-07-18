@@ -13,6 +13,7 @@ from models.get_models import get_model
 from pcdet.datasets.kitti.kitti_dataset import KittiDataset
 from mldatatools.dataset import Dataset
 from mldatatools.dataset import Frame, Message, Sensor, NumpyAnnotation, NumpyFileAnnotation, GlobalPoseMsgData
+from pytransform3d.transform_manager import TransformManager
 
 import hnswlib
 
@@ -38,6 +39,7 @@ class LcdDbDataset:
 
         self.location = location
         self.astral_dataset = Dataset.load(dataset_path, check=False)
+        self.transform_manager: TransformManager = self.astral_dataset.annotation.tf.manager
 
         self.lidar = self._get_sensor_by_name('ld_cc')
         self.gnss = self._get_sensor_by_name('nmea')
@@ -177,6 +179,7 @@ class LcdDbDataset:
         # self.visualizer.add_geometry(query_point_cloud, 'query')
         # print(f'Fitness: {result.fitness}, rmse: {result.inlier_rmse}, d: {query_distance}',
         #       f'{distance_to_second_query}')
+
         return self.geo_poses[query_id], np.linalg.inv(result.transformation)
 
 
