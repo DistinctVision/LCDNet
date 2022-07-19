@@ -1,3 +1,4 @@
+import sys
 import time
 from typing import Union, Optional, List, Tuple, Dict
 from pathlib import Path
@@ -28,6 +29,7 @@ from models.get_models import get_model
 
 from mldatatools.utils import v3d
 from mldatatools.utils.visualizer3d import Visualizer3d
+import ctypes
 
 import rospy
 import sensor_msgs.msg as sensor_msgs
@@ -54,9 +56,14 @@ def record_embeddings(dataset_reader: AstralDatasetReader, writer: Optional[Data
                       visualize: bool = False):
     ros_thread_data = None
     if not check_lidar_apollo_segmentation_service():
-        ros_thread_data = {'stop': False}
+        import subprocess
+        cmd = 'roslaunch lidar_apollo_instance_segmentation debug_lidar_apollo_instance_segmentation.launch'
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True, close_fds=True)
+
+        ros_thread_data = {'stop': False, "process": process}
         ros_thread_data['thread'] = threading.Thread(target=ros_main_lidar_apollo_segmentation,
                                                      args=(ros_thread_data,))
+        ros_thread_data['thread'].daemon = True
         ros_thread_data['thread'].start()
         time.sleep(7.0)
 
@@ -212,7 +219,12 @@ def record_embeddings(dataset_reader: AstralDatasetReader, writer: Optional[Data
                     ui_dynamic_objects.append(visualizer.add_geometry(cube, 'obj'))
     if ros_thread_data:
         ros_thread_data['stop'] = True
-        ros_thread_data['thread'].join(timeout=5)
+        rospy.signal_shutdown('STOP IT')
+        process.kill()
+        print("Start join")
+        ros_thread_data['thread'].join()
+        print('Ros thread is joined')
+        sys.exit(1)
 
 
 if __name__ == '__main__':

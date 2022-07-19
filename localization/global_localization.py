@@ -9,7 +9,11 @@ import rosgraph
 import socket
 import os
 import threading
+import subprocess
+import io
 
+
+import fcntl
 import numpy as np
 import open3d as o3d
 reg_module = o3d.pipelines.registration
@@ -33,10 +37,33 @@ def check_lidar_apollo_segmentation_service() -> bool:
 
 
 def ros_main_lidar_apollo_segmentation(data: dict):
-    stream = os.popen('roslaunch lidar_apollo_instance_segmentation debug_lidar_apollo_instance_segmentation.launch')
-    while (line := stream.readline()) and not data['stop']:
-        print(line)
-    stream.close()
+    process = data["process"]
+
+    fd = process.stdout.fileno()
+    fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+    fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
+    while not data['stop']:
+        try:
+
+            try:
+                line = process.stdout.readline()
+            except:
+                if data['stop']:
+                    break
+            if line == '':
+                print(data['stop'])
+                break
+
+            if line:
+                print('ROS: ' + line.decode("utf-8"))
+        except subprocess.TimeoutExpired:
+            continue
+
+        # line, error = process.communicate()
+        # if line:
+        #     print('ROS: ' + line.decode('utf-8'))
+    print('ROS thread is stopped')
 
 
 class GlobalLocalizer:
